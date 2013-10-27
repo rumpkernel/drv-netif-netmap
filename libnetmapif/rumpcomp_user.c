@@ -83,13 +83,13 @@ opennetmap(int devnum, struct virtif_user *viu)
 		err = ioctl(fd, NIOCREGIF, &req);
 		if (err) {
 			fprintf(stderr, "Unable to register %s errno  %d\n",
-				req.nr_name, errno);
+			    req.nr_name, errno);
 			goto netmap_error;
 		}
 		fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20);
 
 		viu->nm_mem = mmap(0, req.nr_memsize,
-			PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+		    PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
 		if (viu->nm_mem == MAP_FAILED) {
 			fprintf(stderr, "Unable to mmap\n");
 			viu->nm_mem = NULL;
@@ -142,7 +142,6 @@ VIFHYPER_SEND(struct virtif_user *viu,
 	struct iovec *iov, size_t iovlen)
 {
 	void *cookie = rumpuser_component_unschedule();
-	ssize_t idontcare __attribute__((__unused__));
 	struct netmap_if *nifp = viu->nm_nifp;
 	struct netmap_ring *ring = NETMAP_TXRING(nifp, 0);
 	char *p;
@@ -183,7 +182,6 @@ VIFHYPER_SEND(struct virtif_user *viu,
 }
 
 /* how often to check for interface going south */
-#define POLLTIMO_MS 10
 int
 VIFHYPER_RECV(struct virtif_user *viu,
 	void *data, size_t dlen, size_t *rcv)
@@ -203,35 +201,35 @@ VIFHYPER_RECV(struct virtif_user *viu,
 		}
 
 		if (viu->nm_nifp) { /* using netmap */
-		    struct netmap_if *nifp = viu->nm_nifp;
-		    struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
-		    struct netmap_slot *slot = &ring->slot[ring->cur];
+			struct netmap_if *nifp = viu->nm_nifp;
+			struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
+			struct netmap_slot *slot = &ring->slot[ring->cur];
 
-		    prv = 0;
-		    while (ring->avail == 0 && prv == 0) {
-			fprintf(stderr, "receive pkt via netmap\n");
-			prv = poll(&pfd, 1, 1000);
-			if (prv > 0 || (prv < 0 && errno != EAGAIN))
+			prv = 0;
+			while (ring->avail == 0 && prv == 0) {
+				fprintf(stderr, "receive pkt via netmap\n");
+				prv = poll(&pfd, 1, 1000);
+				if (prv > 0 || (prv < 0 && errno != EAGAIN))
+					break;
+			}
+			if (ring->avail == 0) {
+				rv = errno;
 				break;
-		    }
-		    if (ring->avail == 0) {
-			rv = errno;
+			}
+			fprintf(stderr, "got pkt of size %d\n", slot->len);
+			memcpy(data,
+			    NETMAP_BUF(ring, slot->buf_idx), slot->len);
+			ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
+			ring->avail--;
+			*rcv = (size_t)slot->len;
+			rv = 0;
 			break;
-		    }
-		    fprintf(stderr, "got pkt of size %d\n", slot->len);
-		    memcpy(data, NETMAP_BUF(ring, slot->buf_idx), slot->len);
-		    ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
-		    ring->avail--;
-		    *rcv = (size_t)slot->len;
-		    rv = 0;
-		    break;
 		}
 	}
 
 	rumpuser_component_schedule(cookie);
 	return rumpuser_component_errtrans(rv);
 }
-#undef POLLTIMO_MS
 
 void
 VIFHYPER_DYING(struct virtif_user *viu)
