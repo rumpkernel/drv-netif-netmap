@@ -55,6 +55,10 @@ struct virtif_user {
 	char *nm_mem;	/* redundant */
 };
 
+#ifdef NETMAPIF_DEBUG
+#define DPRINTF(x) printf x
+#endif
+
 static int
 opennetmap(int devnum, struct virtif_user *viu)
 {
@@ -66,7 +70,7 @@ opennetmap(int devnum, struct virtif_user *viu)
 		struct nmreq req;
 		int err;
 
-		printf("trying to use netmap on %s\n", mydev);
+		fprintf(stderr, "trying to use netmap on %s\n", mydev);
 
 		fd = open("/dev/netmap", O_RDWR);
 		if (fd < 0) {
@@ -144,14 +148,14 @@ VIFHYPER_SEND(struct virtif_user *viu,
 	char *p;
 	int retries;
 
-	fprintf(stderr, "sending pkt via netmap len %d\n", (int)iovlen);
+	DPRINTF(("sending pkt via netmap len %d\n", (int)iovlen));
 	for (retries = 10; ring->avail == 0 && retries > 0; retries--) {
 		struct pollfd pfd;
 		int err;
 
 		pfd.fd = viu->viu_fd;
 		pfd.events = POLLOUT;
-		fprintf(stderr, "cannot send on netmap, ring full\n");
+		DPRINTF(("cannot send on netmap, ring full\n"));
 		err = poll(&pfd, 1, 500 /* ms */);
 	}
 	if (ring->avail > 0) {
@@ -163,7 +167,7 @@ VIFHYPER_SEND(struct virtif_user *viu,
 			int n = iov[i].iov_len;
 			if (totlen + n > MAX_BUF_SIZE) {
 				n = MAX_BUF_SIZE - totlen;
-				fprintf(stderr, "truncating long pkt");
+				DPRINTF(("truncating long pkt"));
 			}
 			memcpy(p + totlen, iov[i].iov_base, n);
 			p += n;
@@ -203,7 +207,7 @@ VIFHYPER_RECV(struct virtif_user *viu,
 
 		prv = 0;
 		while (ring->avail == 0 && prv == 0) {
-			fprintf(stderr, "receive pkt via netmap\n");
+			DPRINTF(("receive pkt via netmap\n"));
 			prv = poll(&pfd, 1, 1000);
 			if (prv > 0 || (prv < 0 && errno != EAGAIN))
 				break;
@@ -212,7 +216,7 @@ VIFHYPER_RECV(struct virtif_user *viu,
 			rv = errno;
 			break;
 		}
-		fprintf(stderr, "got pkt of size %d\n", slot->len);
+		DPRINTF(("got pkt of size %d\n", slot->len));
 		memcpy(data, NETMAP_BUF(ring, slot->buf_idx), slot->len);
 		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
 		ring->avail--;
