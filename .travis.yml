@@ -3,4 +3,4 @@ language: c
 script:
  - git submodule update --init
  - ./buildrump.sh/buildrump.sh -T rumptools -s rumpsrc -V NOSTATICLIB=1 -qq -j16
- - (export NETMAPIF=`pwd`/include ; cd libnetmapif ; ../rumptools/rumpmake)
+ - (export NETMAPINCS=`pwd`/include ; cd libnetmapif ; ../rumptools/rumpmake)
