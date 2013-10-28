@@ -124,6 +124,7 @@ client(const char *addr, const char *port)
 		fprintf(stderr, "EOF\n");
 	}
 	rump_sys_close(s);
+	sleep(1); /* give a chance for everything to be transmitted */
 }
 
 #define IS_SERVER (strcmp(role, "listen") == 0)
@@ -163,7 +164,6 @@ main(int argc, char *argv[])
 	else
 		client(argv[4], argv[5]);
 
-	usleep(1000); /* give FIN a chance to be transmitted */
 	rump_sys_reboot(0, NULL);
 	exit(0);
 }
