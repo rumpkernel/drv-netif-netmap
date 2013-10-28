@@ -9,6 +9,10 @@ provided by rump kernels to use netmap for packet shoveling.
 Build instructions
 ------------------
 
+If your netmap headers are not in `/usr/include`, set the env
+variable `NETMAPINCS` to point to the right place, e.g.
+`export NETMAPINCS=/home/pooka/netmap/sys`.  Then run:
+
 * `git submodule update --init`
 * `./buildrump.sh/buildrump.sh -T rumptools -s rumpsrc`
 * `(cd libnetmapif ; ../rumptools/rumpmake dependall && ../rumptools/rumpmake install)`
