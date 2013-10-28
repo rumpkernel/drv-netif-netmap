@@ -12,3 +12,9 @@ Build instructions
 * `git submodule update --init`
 * `./buildrump.sh/buildrump.sh -T rumptools -s rumpsrc`
 * `(cd libnetmapif ; ../rumptools/rumpmake dependall && ../rumptools/rumpmake install)`
+
+TODO
+----
+
+* use linkstr to specify netmap args (instead of RUMP_NETIF)
+* update to newer virtif hypercalls
