@@ -1,0 +1,3 @@
+This subdirectory includes headers from the netmap package.  They are
+meant to make automated build testing easier.  For all other purposes,
+use the headers which match the netmap kernel drivers you are using.
