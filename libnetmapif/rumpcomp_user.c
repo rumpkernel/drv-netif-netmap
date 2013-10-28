@@ -169,6 +169,7 @@ VIFHYPER_SEND(struct virtif_user *viu,
 			p += n;
 			totlen += n;
 		}
+#undef MAX_BUF_SIZE
 		slot->len = totlen;
 		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
 		ring->avail--;
@@ -178,7 +179,6 @@ VIFHYPER_SEND(struct virtif_user *viu,
 	rumpuser_component_schedule(cookie);
 }
 
-/* how often to check for interface going south */
 int
 VIFHYPER_RECV(struct virtif_user *viu,
 	void *data, size_t dlen, size_t *rcv)
@@ -191,37 +191,34 @@ VIFHYPER_RECV(struct virtif_user *viu,
 	pfd.events = POLLIN;
 
 	for (;;) {
+		struct netmap_if *nifp = viu->nm_nifp;
+		struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
+		struct netmap_slot *slot = &ring->slot[ring->cur];
+
 		if (viu->viu_dying) {
 			rv = 0;
 			*rcv = 0;
 			break;
 		}
 
-		if (viu->nm_nifp) { /* using netmap */
-			struct netmap_if *nifp = viu->nm_nifp;
-			struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
-			struct netmap_slot *slot = &ring->slot[ring->cur];
-
-			prv = 0;
-			while (ring->avail == 0 && prv == 0) {
-				fprintf(stderr, "receive pkt via netmap\n");
-				prv = poll(&pfd, 1, 1000);
-				if (prv > 0 || (prv < 0 && errno != EAGAIN))
-					break;
-			}
-			if (ring->avail == 0) {
-				rv = errno;
+		prv = 0;
+		while (ring->avail == 0 && prv == 0) {
+			fprintf(stderr, "receive pkt via netmap\n");
+			prv = poll(&pfd, 1, 1000);
+			if (prv > 0 || (prv < 0 && errno != EAGAIN))
 				break;
-			}
-			fprintf(stderr, "got pkt of size %d\n", slot->len);
-			memcpy(data,
-			    NETMAP_BUF(ring, slot->buf_idx), slot->len);
-			ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
-			ring->avail--;
-			*rcv = (size_t)slot->len;
-			rv = 0;
+		}
+		if (ring->avail == 0) {
+			rv = errno;
 			break;
 		}
+		fprintf(stderr, "got pkt of size %d\n", slot->len);
+		memcpy(data, NETMAP_BUF(ring, slot->buf_idx), slot->len);
+		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
+		ring->avail--;
+		*rcv = (size_t)slot->len;
+		rv = 0;
+		break;
 	}
 
 	rumpuser_component_schedule(cookie);
