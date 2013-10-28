@@ -51,7 +51,7 @@ struct virtif_user {
 	int viu_fd;
 	int viu_dying;
 
-	void *nm_nifp; /* points to nifp if we use netmap netmap */
+	void *nm_nifp; /* points to nifp if we use netmap */
 	char *nm_mem;	/* redundant */
 };
 
@@ -59,16 +59,13 @@ static int
 opennetmap(int devnum, struct virtif_user *viu)
 {
 	int fd = -1;
-
-	char *mydev, *basename = "netmap:";
-	int base = strlen(basename);
+	char *mydev;
 
 	mydev = getenv("RUMP_NETIF");
-	if (mydev && !strncmp(basename, mydev, base)) {
+	if (mydev) {
 		struct nmreq req;
 		int err;
 
-		mydev += base;
 		printf("trying to use netmap on %s\n", mydev);
 
 		fd = open("/dev/netmap", O_RDWR);
