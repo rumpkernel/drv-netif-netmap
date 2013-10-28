@@ -1,4 +1,4 @@
-netmap-rumptcpip
+netmap-rumptcpip [![Build Status](https://travis-ci.org/anttikantee/netmap-rumptcpip.png?branch=master)](https://travis-ci.org/anttikantee/netmap-rumptcpip)
 ================
 
 This repository contains a [netmap](http://info.iet.unipi.it/~luigi/netmap/)
