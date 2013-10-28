@@ -172,7 +172,6 @@ VIFHYPER_SEND(struct virtif_user *viu,
 				DPRINTF(("truncating long pkt"));
 			}
 			memcpy(p + totlen, iov[i].iov_base, n);
-			p += n;
 			totlen += n;
 		}
 #undef MAX_BUF_SIZE
