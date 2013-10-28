@@ -1,8 +1,14 @@
 netmap-rumptcpip
 ================
 
-[Netmap](http://info.iet.unipi.it/~luigi/netmap/) backend for
-TCP/IP offered by [rump kernels](https://www.netbsd.org/docs/rump/).
+This repository contains a [netmap](http://info.iet.unipi.it/~luigi/netmap/)
+backed network interface for [rump
+kernels](https://www.netbsd.org/docs/rump/), allowing networking stacks
+provided by rump kernels to use netmap for packet shoveling.
 
-More information upcoming.  For now: compile with `rumpmake`
-(see https://github.com/anttikantee/buildrump.sh)
+Build instructions
+------------------
+
+* `git submodule update --init`
+* `./buildrump.sh/buildrump.sh -T rumptools -s rumpsrc`
+* `(cd libnetmapif ; ../rumptools/rumpmake dependall && ../rumptools/rumpmake install)`
