@@ -178,7 +178,8 @@ VIFHYPER_SEND(struct virtif_user *viu,
 		slot->len = totlen;
 		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
 		ring->avail--;
-		ioctl(viu->viu_fd, NIOCTXSYNC);
+		if (ioctl(viu->viu_fd, NIOCTXSYNC, NULL) < 0)
+			perror("NIOCTXSYNC");
 	}
 
 	rumpuser_component_schedule(cookie);
