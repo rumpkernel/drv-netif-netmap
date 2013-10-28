@@ -57,6 +57,8 @@ struct virtif_user {
 
 #ifdef NETMAPIF_DEBUG
 #define DPRINTF(x) printf x
+#else
+#define DPRINTF(x)
 #endif
 
 static int
