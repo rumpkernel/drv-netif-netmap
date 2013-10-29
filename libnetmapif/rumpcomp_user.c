@@ -82,7 +82,7 @@ opennetmap(int devnum, struct virtif_user *viu)
 		bzero(&req, sizeof(req));
 		req.nr_version = NETMAP_API;
 		strncpy(req.nr_name, mydev, sizeof(req.nr_name));
-		req.nr_ringid = 0;
+		req.nr_ringid = NETMAP_NO_TX_POLL;
 		err = ioctl(fd, NIOCREGIF, &req);
 		if (err) {
 			fprintf(stderr, "Unable to register %s errno  %d\n",
