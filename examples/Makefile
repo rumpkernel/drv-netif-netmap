@@ -2,7 +2,7 @@ LDFLAGS= -L../rump/lib -Wl,-R../rump/lib -Wl,--no-as-needed -lrumpnet_netmapif -
 
 CFLAGS=-I../rump/include -Wall
 
-all: netmapcat
+all: netmapcat netmapsend netmapreceive
 
 clean:
-	rm -f netmapcat
+	rm -f netmapcat netmapsend netmapreceive

@@ -73,7 +73,7 @@ main(int argc, char *argv[])
 	struct sockaddr_in sin;
 	char *dummy, *packet;
 	int port;
-	int error;
+	int error = 0;
 	const char *cause = NULL;
 	int s;
 	struct pollfd fds[MAXSOCK];
@@ -126,7 +126,7 @@ main(int argc, char *argv[])
 	*/
 	if (rump_sys_bind(s, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
 		cause = "bind";
-		/* close(s); */
+		rump_sys_close(s);
 		goto out;
 	}
 	(void) rump_sys_listen(s, 5);
@@ -140,7 +140,7 @@ main(int argc, char *argv[])
 		if (rump_sys_poll(fds, 1, -1) < 0) 
 			perror("poll");
 		if (fds[0].revents & POLLIN) {
-			if (recv(s, packet, 65536, 0) < 0) {
+			if (rump_sys_recvfrom(s, packet, 65536, 0, NULL, 0) < 0) {
 				read_errors++;
 				perror("recv");
 			} else {
@@ -151,7 +151,9 @@ main(int argc, char *argv[])
 			perror("poll");
 	}
 	
+	
 out:
-	perror(cause);
-	return 1;
+	if (error) perror(cause);
+	rump_sys_reboot(0, NULL);	
+	return !!error;
 }
