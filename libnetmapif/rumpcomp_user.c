@@ -210,7 +210,7 @@ VIFHYPER_RECV(struct virtif_user *viu,
 		prv = 0;
 		while (ring->avail == 0 && prv == 0) {
 			DPRINTF(("receive pkt via netmap\n"));
-			prv = poll(&pfd, 1, 50);
+			prv = poll(&pfd, 1, 1000);
 			if (prv > 0 || (prv < 0 && errno != EAGAIN))
 				break;
 		}
