@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,9 @@
 struct virtif_user {
 	int viu_fd;
 	int viu_dying;
+	pthread_t viu_pt;
+
+	struct virtif_sc *viu_virtifsc;
 
 	void *nm_nifp; /* points to nifp if we use netmap */
 	char *nm_mem;	/* redundant */
@@ -109,8 +113,66 @@ opennetmap(int devnum, struct virtif_user *viu)
 	return -1;
 }
 
+/*
+ * Note: this thread is the only one pulling packets off of any
+ * given netmap instance
+ */
+static void *
+receiver(void *arg)
+{
+	struct virtif_user *viu = arg;
+	struct iovec iov;
+	struct netmap_if *nifp = viu->nm_nifp;
+	struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
+	struct netmap_slot *slot;
+	struct pollfd pfd;
+	int prv;
+
+	rumpuser_component_kthread();
+
+	for (;;) {
+		pfd.fd = viu->viu_fd;
+		pfd.events = POLLIN;
+
+		if (viu->viu_dying) {
+			break;
+		}
+
+		prv = 0;
+		while (ring->avail == 0 && prv == 0) {
+			DPRINTF(("receive pkt via netmap\n"));
+			prv = poll(&pfd, 1, 1000);
+			if (prv > 0 || (prv < 0 && errno != EAGAIN))
+				break;
+		}
+#if 0
+		/* XXX: report non-transient errors */
+		if (ring->avail == 0) {
+			rv = errno;
+			break;
+		}
+#endif
+		slot = &ring->slot[ring->cur];
+		DPRINTF(("got pkt of size %d\n", slot->len));
+		iov.iov_base = NETMAP_BUF(ring, slot->buf_idx);
+		iov.iov_len = slot->len;
+
+		/* XXX: allow batch processing */
+		rumpuser_component_schedule(NULL);
+		rump_virtif_pktdeliver(viu->viu_virtifsc, &iov, 1);
+		rumpuser_component_unschedule();
+
+		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
+		ring->avail--;
+	}
+
+	rumpuser_component_kthread_release();
+	return NULL;
+}
+
 int
-VIFHYPER_CREATE(int devnum, struct virtif_user **viup)
+VIFHYPER_CREATE(int devnum, struct virtif_sc *vif_sc, uint8_t *enaddr,
+	struct virtif_user **viup)
 {
 	struct virtif_user *viu = NULL;
 	void *cookie;
@@ -131,7 +193,14 @@ VIFHYPER_CREATE(int devnum, struct virtif_user **viup)
 		goto out;
 	}
 	viu->viu_dying = 0;
-	rv = 0;
+	viu->viu_virtifsc = vif_sc;
+
+	if ((rv = pthread_create(&viu->viu_pt, NULL, receiver, viu)) != 0) {
+		printf("%s: pthread_create failed!\n",
+		    VIF_STRING(VIFHYPER_CREATE));
+		close(viu->viu_fd);
+		free(viu);
+	}
 
  out:
 	rumpuser_component_schedule(cookie);
@@ -185,52 +254,6 @@ VIFHYPER_SEND(struct virtif_user *viu,
 	rumpuser_component_schedule(cookie);
 }
 
-int
-VIFHYPER_RECV(struct virtif_user *viu,
-	void *data, size_t dlen, size_t *rcv)
-{
-	void *cookie = rumpuser_component_unschedule();
-	struct pollfd pfd;
-	int rv, prv;
-
-	pfd.fd = viu->viu_fd;
-	pfd.events = POLLIN;
-
-	for (;;) {
-		struct netmap_if *nifp = viu->nm_nifp;
-		struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
-		struct netmap_slot *slot = &ring->slot[ring->cur];
-
-		if (viu->viu_dying) {
-			rv = 0;
-			*rcv = 0;
-			break;
-		}
-
-		prv = 0;
-		while (ring->avail == 0 && prv == 0) {
-			DPRINTF(("receive pkt via netmap\n"));
-			prv = poll(&pfd, 1, 1000);
-			if (prv > 0 || (prv < 0 && errno != EAGAIN))
-				break;
-		}
-		if (ring->avail == 0) {
-			rv = errno;
-			break;
-		}
-		DPRINTF(("got pkt of size %d\n", slot->len));
-		memcpy(data, NETMAP_BUF(ring, slot->buf_idx), slot->len);
-		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
-		ring->avail--;
-		*rcv = (size_t)slot->len;
-		rv = 0;
-		break;
-	}
-
-	rumpuser_component_schedule(cookie);
-	return rumpuser_component_errtrans(rv);
-}
-
 void
 VIFHYPER_DYING(struct virtif_user *viu)
 {
@@ -244,6 +267,7 @@ VIFHYPER_DESTROY(struct virtif_user *viu)
 {
 	void *cookie = rumpuser_component_unschedule();
 
+	pthread_join(viu->viu_pt, NULL);
 	close(viu->viu_fd);
 	free(viu);
 
