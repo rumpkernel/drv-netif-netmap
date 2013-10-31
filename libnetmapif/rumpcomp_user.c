@@ -26,10 +26,14 @@
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/uio.h>
 
 #include <errno.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <inttypes.h>
 #include <poll.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -37,13 +41,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#include <rump/rumpuser_component.h>
-
-#include <inttypes.h>
-#include <sys/mman.h>
 #include <net/if.h>
 #include <net/netmap.h>
 #include <net/netmap_user.h>
+
+#include <rump/rumpuser_component.h>
 
 #include "if_virt.h"
 #include "rumpcomp_user.h"
@@ -65,8 +67,10 @@ struct virtif_user {
 #define DPRINTF(x)
 #endif
 
+static int source_hwaddr(const char *, uint8_t *);
+
 static int
-opennetmap(int devnum, struct virtif_user *viu)
+opennetmap(int devnum, struct virtif_user *viu, uint8_t *enaddr)
 {
 	int fd = -1;
 	char *mydev;
@@ -104,6 +108,13 @@ opennetmap(int devnum, struct virtif_user *viu)
 		}
 		viu->nm_nifp = NETMAP_IF(viu->nm_mem, req.nr_offset);
 		fprintf(stderr, "netmap:%s mem %d\n", mydev, req.nr_memsize);
+
+		if (source_hwaddr(mydev, enaddr) != 0) {
+			if (strncmp(mydev, "vale", 4) != 0) {
+				fprintf(stderr, "netmap:%s: failed to retrieve "
+				    "MAC address\n", mydev);
+			}
+		}
 		return fd;
 	}
 
@@ -186,7 +197,7 @@ VIFHYPER_CREATE(int devnum, struct virtif_sc *vif_sc, uint8_t *enaddr,
 		goto out;
 	}
 
-	viu->viu_fd = opennetmap(devnum, viu);
+	viu->viu_fd = opennetmap(devnum, viu, enaddr);
 	if (viu->viu_fd == -1) {
 		rv = errno;
 		free(viu);
@@ -273,3 +284,70 @@ VIFHYPER_DESTROY(struct virtif_user *viu)
 
 	rumpuser_component_schedule(cookie);
 }
+
+/* From netmap/examples/pkt-gen.c */
+/*
+ * Copyright (C) 2011-2012 Matteo Landi, Luigi Rizzo. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *   1. Redistributions of source code must retain the above copyright
+ *      notice, this list of conditions and the following disclaimer.
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ */
+
+#ifdef __linux__
+#include <netpacket/packet.h>
+
+#define sockaddr_dl    sockaddr_ll
+#define sdl_family     sll_family
+#define AF_LINK        AF_PACKET
+#define LLADDR(s)      s->sll_addr
+#endif /* __linux__ */
+
+/*
+ * locate the src mac address for our interface, put it
+ * into the user-supplied buffer. return 0 if ok, -1 on error.
+ */
+#define D(x, y)
+static int
+source_hwaddr(const char *ifname, uint8_t *enaddr)
+{
+	struct ifaddrs *ifaphead, *ifap;
+	int l = sizeof(ifap->ifa_name);
+
+	if (getifaddrs(&ifaphead) != 0) {
+		D("getifaddrs %s failed", ifname);
+		return (-1);
+	}
+
+	for (ifap = ifaphead; ifap; ifap = ifap->ifa_next) {
+		struct sockaddr_dl *sdl =
+			(struct sockaddr_dl *)ifap->ifa_addr;
+
+		if (!sdl || sdl->sdl_family != AF_LINK)
+			continue;
+		if (strncmp(ifap->ifa_name, ifname, l) != 0)
+			continue;
+		memcpy(enaddr, LLADDR(sdl), 6);
+		break;
+	}
+	freeifaddrs(ifaphead);
+	return ifap ? 0 : 1;
+}
+#undef D
