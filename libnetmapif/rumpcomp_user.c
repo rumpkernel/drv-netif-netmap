@@ -221,20 +221,24 @@ VIFHYPER_CREATE(int devnum, struct virtif_sc *vif_sc, uint8_t *enaddr,
 }
 
 void
-VIFHYPER_SEND(struct virtif_user *viu,
-	struct iovec *iov, size_t iovlen)
+VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 {
-	void *cookie = rumpuser_component_unschedule();
+	void *cookie = NULL; /* XXXgcc */
 	struct netmap_if *nifp = viu->nm_nifp;
 	struct netmap_ring *ring = NETMAP_TXRING(nifp, 0);
 	char *p;
 	int retries;
+	int unscheduled = 0;
 
 	DPRINTF(("sending pkt via netmap len %d\n", (int)iovlen));
 	for (retries = 10; ring->avail == 0 && retries > 0; retries--) {
 		struct pollfd pfd;
 		int err;
 
+		if (!unscheduled) {
+			cookie = rumpuser_component_unschedule();
+			unscheduled = 1;
+		}
 		pfd.fd = viu->viu_fd;
 		pfd.events = POLLOUT;
 		DPRINTF(("cannot send on netmap, ring full\n"));
@@ -262,7 +266,8 @@ VIFHYPER_SEND(struct virtif_user *viu,
 			perror("NIOCTXSYNC");
 	}
 
-	rumpuser_component_schedule(cookie);
+	if (unscheduled)
+		rumpuser_component_schedule(cookie);
 }
 
 void
