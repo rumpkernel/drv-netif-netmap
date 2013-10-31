@@ -36,4 +36,3 @@ TODO
 ----
 
 * use linkstr to specify netmap args (instead of RUMP_NETIF)
-* update to newer virtif hypercalls
