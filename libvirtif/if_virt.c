@@ -216,7 +216,7 @@ virtif_stop(struct ifnet *ifp, int disable)
 }
 
 void
-rump_virtif_pktdeliver(struct virtif_sc *sc, struct iovec *iov, size_t iovlen)
+VIF_DELIVERPKT(struct virtif_sc *sc, struct iovec *iov, size_t iovlen)
 {
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct mbuf *m;

@@ -170,7 +170,7 @@ receiver(void *arg)
 
 		/* XXX: allow batch processing */
 		rumpuser_component_schedule(NULL);
-		rump_virtif_pktdeliver(viu->viu_virtifsc, &iov, 1);
+		VIF_DELIVERPKT(viu->viu_virtifsc, &iov, 1);
 		rumpuser_component_unschedule();
 
 		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
