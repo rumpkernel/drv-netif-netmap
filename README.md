@@ -30,9 +30,3 @@ connect them to each other via the VALE virtual switch:
 
 Observe whatever you type in the latter terminal magically(?) appear in
 the other one.
-
-
-TODO
-----
-
-* use linkstr to specify netmap args (instead of RUMP_NETIF)
