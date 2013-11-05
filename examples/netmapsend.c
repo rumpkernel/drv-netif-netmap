@@ -310,10 +310,12 @@ main(int argc, char *argv[])
 		usage();
 
 	rump_init();
-	setenv("RUMP_NETIF", argv[1], 1);
 	error = rump_pub_netconfig_ifcreate("netmap0");
 	if (error)
 		errx(1, "ifcreate %d", error);
+	error = rump_pub_netconfig_ifsetlinkstr("netmap0", argv[1]);
+	if (error)
+		errx(1, "linkstr %d", error);
 	error = rump_pub_netconfig_ipv4_ifaddr("netmap0",
 		argv[2], "255.255.255.0");
 	if (error)

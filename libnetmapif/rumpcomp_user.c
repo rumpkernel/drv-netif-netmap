@@ -70,58 +70,54 @@ struct virtif_user {
 static int source_hwaddr(const char *, uint8_t *);
 
 static int
-opennetmap(int devnum, struct virtif_user *viu, uint8_t *enaddr)
+opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 {
 	int fd = -1;
-	char *mydev;
+	struct nmreq req;
+	int err;
 
-	mydev = getenv("RUMP_NETIF");
-	if (mydev) {
-		struct nmreq req;
-		int err;
+	fprintf(stderr, "trying to use netmap on %s\n", devstr);
 
-		fprintf(stderr, "trying to use netmap on %s\n", mydev);
+	fd = open("/dev/netmap", O_RDWR);
+	if (fd == -1) {
+		fprintf(stderr, "Unable to open /dev/netmap\n");
+		goto out;
+	}
+	bzero(&req, sizeof(req));
+	req.nr_version = NETMAP_API;
+	strncpy(req.nr_name, devstr, sizeof(req.nr_name));
+	req.nr_ringid = NETMAP_NO_TX_POLL;
+	err = ioctl(fd, NIOCREGIF, &req);
+	if (err) {
+		fprintf(stderr, "Unable to register %s errno  %d\n",
+		    req.nr_name, errno);
+		goto out;
+	}
+	fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20);
 
-		fd = open("/dev/netmap", O_RDWR);
-		if (fd < 0) {
-			fprintf(stderr, "Unable to open /dev/netmap\n");
-			goto netmap_error;
+	viu->nm_mem = mmap(0, req.nr_memsize,
+	    PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
+	if (viu->nm_mem == MAP_FAILED) {
+		fprintf(stderr, "Unable to mmap\n");
+		viu->nm_mem = NULL;
+		goto out;
+	}
+	viu->nm_nifp = NETMAP_IF(viu->nm_mem, req.nr_offset);
+	fprintf(stderr, "netmap:%s mem %d\n", devstr, req.nr_memsize);
+
+	if (source_hwaddr(devstr, enaddr) != 0) {
+		if (strncmp(devstr, "vale", 4) != 0) {
+			fprintf(stderr, "netmap:%s: failed to retrieve "
+			    "MAC address\n", devstr);
 		}
-		bzero(&req, sizeof(req));
-		req.nr_version = NETMAP_API;
-		strncpy(req.nr_name, mydev, sizeof(req.nr_name));
-		req.nr_ringid = NETMAP_NO_TX_POLL;
-		err = ioctl(fd, NIOCREGIF, &req);
-		if (err) {
-			fprintf(stderr, "Unable to register %s errno  %d\n",
-			    req.nr_name, errno);
-			goto netmap_error;
-		}
-		fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20);
-
-		viu->nm_mem = mmap(0, req.nr_memsize,
-		    PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
-		if (viu->nm_mem == MAP_FAILED) {
-			fprintf(stderr, "Unable to mmap\n");
-			viu->nm_mem = NULL;
-			goto netmap_error;
-		}
-		viu->nm_nifp = NETMAP_IF(viu->nm_mem, req.nr_offset);
-		fprintf(stderr, "netmap:%s mem %d\n", mydev, req.nr_memsize);
-
-		if (source_hwaddr(mydev, enaddr) != 0) {
-			if (strncmp(mydev, "vale", 4) != 0) {
-				fprintf(stderr, "netmap:%s: failed to retrieve "
-				    "MAC address\n", mydev);
-			}
-		}
-		return fd;
 	}
 
- netmap_error:
-	if (fd)
+ out:
+	if (err && fd != -1) {
 		close(fd);
-	return -1;
+		fd = -1;
+	}
+	return fd;
 }
 
 /*
@@ -182,7 +178,7 @@ receiver(void *arg)
 }
 
 int
-VIFHYPER_CREATE(int devnum, struct virtif_sc *vif_sc, uint8_t *enaddr,
+VIFHYPER_CREATE(const char *devstr, struct virtif_sc *vif_sc, uint8_t *enaddr,
 	struct virtif_user **viup)
 {
 	struct virtif_user *viu = NULL;
@@ -197,7 +193,7 @@ VIFHYPER_CREATE(int devnum, struct virtif_sc *vif_sc, uint8_t *enaddr,
 		goto out;
 	}
 
-	viu->viu_fd = opennetmap(devnum, viu, enaddr);
+	viu->viu_fd = opennetmap(devstr, viu, enaddr);
 	if (viu->viu_fd == -1) {
 		rv = errno;
 		free(viu);

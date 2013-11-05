@@ -143,10 +143,12 @@ main(int argc, char *argv[])
 		usage();
 
 	rump_init();
-	setenv("RUMP_NETIF", netmapif, 1); /* XXX: convert to linkstr */
 	error = rump_pub_netconfig_ifcreate("netmap0");
 	if (error)
 		errx(1, "ifcreate %d", error);
+	error = rump_pub_netconfig_ifsetlinkstr("netmap0", netmapif);
+	if (error)
+		errx(1, "linkstr %d", error);
 
 	if (strcmp(ifaddr, "dhcp") == 0) {
 		error = rump_pub_netconfig_dhcp_ipv4_oneshot("netmap0");
