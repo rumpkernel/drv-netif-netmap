@@ -18,8 +18,8 @@ variable `NETMAPINCS` to point to the right place, e.g.
 * `(cd libnetmapif ; ../rumptools/rumpmake dependall && ../rumptools/rumpmake install)`
 
 
-Use example
------------
+Use examples
+------------
 
 Go to `examples` and compile with `make`.  Then configure one TCP/IP
 stack with the address 1.2.3.4, another with the address 1.2.3.5, and
@@ -30,3 +30,6 @@ connect them to each other via the VALE virtual switch:
 
 Observe whatever you type in the latter terminal magically(?) appear in
 the other one.
+
+By replacing `vale:x` with a real interface name, e.g. `ix0`, you should
+be able to bind to a physical network interface and access the wire.
