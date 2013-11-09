@@ -145,7 +145,7 @@ virtif_clone(struct if_clone *ifc, int num)
 	error = virtif_create(ifp);
 	if (error) {
 		if_detach(ifp);
-		kmem_free(ifp->if_softc, sizeof(*ifp->if_softc));
+		kmem_free(sc, sizeof(*sc));
 		ifp->if_softc = NULL;
 	}
 #endif /* !RUMP_VIF_LINKSTR */
