@@ -74,7 +74,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 {
 	int fd = -1;
 	struct nmreq req;
-	int err;
+	int err = 0;
 
 	fprintf(stderr, "trying to use netmap on %s\n", devstr);
 
@@ -319,6 +319,8 @@ VIFHYPER_DESTROY(struct virtif_user *viu)
 #define sdl_family     sll_family
 #define AF_LINK        AF_PACKET
 #define LLADDR(s)      s->sll_addr
+#else
+#include <net/if_dl.h>
 #endif /* __linux__ */
 
 /*
