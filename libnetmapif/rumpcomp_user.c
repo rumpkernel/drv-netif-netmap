@@ -74,7 +74,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 {
 	int fd = -1;
 	struct nmreq req;
-	int err;
+	int err = 0;
 
 	fprintf(stderr, "trying to use netmap on %s\n", devstr);
 
