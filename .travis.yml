@@ -5,3 +5,6 @@ script:
  - ./buildrump.sh/buildrump.sh -T rumptools -s rumpsrc -V NOSTATICLIB=1 -qq -j16 checkout fullbuild
  - (export NETMAPINCS=`pwd`/include ; cd libnetmapif ; ../rumptools/rumpmake MAKEVERBOSE=2 dependall && ../rumptools/rumpmake install)
  - (cd examples ; make )
+
+notifications:
+  irc: "chat.freenode.net#rumpkernel-builds"
