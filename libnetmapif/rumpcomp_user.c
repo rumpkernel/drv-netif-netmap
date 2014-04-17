@@ -58,7 +58,8 @@ struct virtif_user {
 	struct virtif_sc *viu_virtifsc;
 
 	void *nm_nifp; /* points to nifp if we use netmap */
-	char *nm_mem;	/* redundant */
+	char *nm_mem;
+	size_t nm_memsize;
 };
 
 #ifdef NETMAPIF_DEBUG
@@ -95,6 +96,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 	}
 	/* fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20); */
 
+	viu->nm_memsize = req.nr_memsize;
 	viu->nm_mem = mmap(0, req.nr_memsize,
 	    PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
 	if (viu->nm_mem == MAP_FAILED) {
@@ -283,8 +285,9 @@ VIFHYPER_DESTROY(struct virtif_user *viu)
 {
 	void *cookie = rumpuser_component_unschedule();
 
-	pthread_join(viu->viu_pt, NULL);
 	close(viu->viu_fd);
+	pthread_join(viu->viu_pt, NULL);
+	munmap(viu->nm_mem, viu->nm_memsize);
 	free(viu);
 
 	rumpuser_component_schedule(cookie);
