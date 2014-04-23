@@ -76,7 +76,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 	struct nmreq req;
 	int err = 0;
 
-	fprintf(stderr, "trying to use netmap on %s\n", devstr);
+	/* fprintf(stderr, "trying to use netmap on %s\n", devstr); */
 
 	fd = open("/dev/netmap", O_RDWR);
 	if (fd == -1) {
@@ -93,7 +93,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 		    req.nr_name, errno);
 		goto out;
 	}
-	fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20);
+	/* fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20); */
 
 	viu->nm_mem = mmap(0, req.nr_memsize,
 	    PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
@@ -103,7 +103,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 		goto out;
 	}
 	viu->nm_nifp = NETMAP_IF(viu->nm_mem, req.nr_offset);
-	fprintf(stderr, "netmap:%s mem %d\n", devstr, req.nr_memsize);
+	/* fprintf(stderr, "netmap:%s mem %d\n", devstr, req.nr_memsize); */
 
 	if (source_hwaddr(devstr, enaddr) != 0) {
 		if (strncmp(devstr, "vale", 4) != 0) {
