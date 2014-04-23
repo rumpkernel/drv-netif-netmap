@@ -146,7 +146,7 @@ receiver(void *arg)
 		}
 
 		prv = 0;
-		while (ring->avail == 0 && prv == 0) {
+		while (nm_ring_empty(ring) && prv == 0) {
 			DPRINTF(("receive pkt via netmap\n"));
 			prv = poll(&pfd, 1, 1000);
 			if (prv > 0 || (prv < 0 && errno != EAGAIN))
@@ -169,8 +169,7 @@ receiver(void *arg)
 		VIF_DELIVERPKT(viu->viu_virtifsc, &iov, 1);
 		rumpuser_component_unschedule();
 
-		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
-		ring->avail--;
+		ring->head = ring->cur = nm_ring_next(ring, ring->cur);
 	}
 
 	rumpuser_component_kthread_release();
@@ -225,9 +224,10 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 	char *p;
 	int retries;
 	int unscheduled = 0;
+	unsigned n;
 
 	DPRINTF(("sending pkt via netmap len %d\n", (int)iovlen));
-	for (retries = 10; ring->avail == 0 && retries > 0; retries--) {
+	for (retries = 10; !(n = nm_ring_space(ring)) && retries > 0; retries--) {
 		struct pollfd pfd;
 		int err;
 
@@ -240,7 +240,7 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 		DPRINTF(("cannot send on netmap, ring full\n"));
 		err = poll(&pfd, 1, 500 /* ms */);
 	}
-	if (ring->avail > 0) {
+	if (n > 0) {
 		int i, totlen = 0;
 		struct netmap_slot *slot = &ring->slot[ring->cur];
 #define MAX_BUF_SIZE 1900
@@ -256,8 +256,7 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 		}
 #undef MAX_BUF_SIZE
 		slot->len = totlen;
-		ring->cur = NETMAP_RING_NEXT(ring, ring->cur);
-		ring->avail--;
+		ring->head = ring->cur = nm_ring_next(ring, ring->cur);
 		if (ioctl(viu->viu_fd, NIOCTXSYNC, NULL) < 0)
 			perror("NIOCTXSYNC");
 	}
