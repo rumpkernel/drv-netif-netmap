@@ -194,6 +194,7 @@ virtif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	switch (cmd) {
 #ifdef RUMP_VIF_LINKSTR
 	struct ifdrv *ifd;
+	size_t linkstrlen;
 
 #ifndef RUMP_VIF_LINKSTRMAX
 #define RUMP_VIF_LINKSTRMAX 4096
@@ -206,9 +207,10 @@ virtif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 			rv = ENOENT;
 			break;
 		}
-		ifd->ifd_len = sc->sc_linkstrlen;
+		linkstrlen = strlen(sc->sc_linkstr)+1;
 
 		if (ifd->ifd_cmd == IFLINKSTR_QUERYLEN) {
+			ifd->ifd_len = linkstrlen;
 			rv = 0;
 			break;
 		}
@@ -218,7 +220,7 @@ virtif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 
 		rv = copyoutstr(sc->sc_linkstr, ifd->ifd_data,
-		    MIN(sc->sc_linkstrlen, ifd->ifd_len), NULL);
+		    MIN(linkstrlen, ifd->ifd_len), NULL);
 		break;
 	case SIOCSLINKSTR:
 		if (ifp->if_flags & IFF_UP) {
