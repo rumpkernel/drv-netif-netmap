@@ -229,7 +229,6 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 	DPRINTF(("sending pkt via netmap len %d\n", (int)iovlen));
 	for (retries = 10; !(n = nm_ring_space(ring)) && retries > 0; retries--) {
 		struct pollfd pfd;
-		int err;
 
 		if (!unscheduled) {
 			cookie = rumpuser_component_unschedule();
@@ -238,7 +237,7 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 		pfd.fd = viu->viu_fd;
 		pfd.events = POLLOUT;
 		DPRINTF(("cannot send on netmap, ring full\n"));
-		err = poll(&pfd, 1, 500 /* ms */);
+		(void)poll(&pfd, 1, 500 /* ms */);
 	}
 	if (n > 0) {
 		int i, totlen = 0;
