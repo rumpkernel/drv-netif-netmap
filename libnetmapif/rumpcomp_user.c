@@ -130,10 +130,11 @@ receiver(void *arg)
 	struct virtif_user *viu = arg;
 	struct iovec iov;
 	struct netmap_if *nifp = viu->nm_nifp;
-	struct netmap_ring *ring = NETMAP_RXRING(nifp, 0);
+	struct netmap_ring *ring;
 	struct netmap_slot *slot;
 	struct pollfd pfd;
 	int prv;
+	int i;
 
 	rumpuser_component_kthread();
 
@@ -146,7 +147,7 @@ receiver(void *arg)
 		}
 
 		prv = 0;
-		while (nm_ring_empty(ring) && prv == 0) {
+		while (prv == 0) {
 			DPRINTF(("receive pkt via netmap\n"));
 			prv = poll(&pfd, 1, 1000);
 			if (prv > 0 || (prv < 0 && errno != EAGAIN))
@@ -159,17 +160,22 @@ receiver(void *arg)
 			break;
 		}
 #endif
-		slot = &ring->slot[ring->cur];
-		DPRINTF(("got pkt of size %d\n", slot->len));
-		iov.iov_base = NETMAP_BUF(ring, slot->buf_idx);
-		iov.iov_len = slot->len;
+		for (i = 0; i < nifp->ni_rx_rings; i++) {
+			ring = NETMAP_RXRING(nifp, i);
+			while (!nm_ring_empty(ring)) {
+				slot = &ring->slot[ring->cur];
+				DPRINTF(("got pkt of size %d\n", slot->len));
+				iov.iov_base = NETMAP_BUF(ring, slot->buf_idx);
+				iov.iov_len = slot->len;
 
-		/* XXX: allow batch processing */
-		rumpuser_component_schedule(NULL);
-		VIF_DELIVERPKT(viu->viu_virtifsc, &iov, 1);
-		rumpuser_component_unschedule();
+				/* XXX: allow batch processing */
+				rumpuser_component_schedule(NULL);
+				VIF_DELIVERPKT(viu->viu_virtifsc, &iov, 1);
+				rumpuser_component_unschedule();
 
-		ring->head = ring->cur = nm_ring_next(ring, ring->cur);
+				ring->head = ring->cur = nm_ring_next(ring, ring->cur);
+			}
+		}
 	}
 
 	rumpuser_component_kthread_release();
