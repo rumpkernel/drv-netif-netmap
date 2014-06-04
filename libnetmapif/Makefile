@@ -14,7 +14,7 @@ CPPFLAGS+=	-DVIRTIF_BASE=netmap -DRUMP_VIF_LINKSTR
 RUMPCOMP_USER=	#defined
 RUMPCOMP_USER_CPPFLAGS+= ${NETMAPINCS:D-I${NETMAPINCS}}
 RUMPCOMP_USER_CPPFLAGS+= -I${.CURDIR}/../libvirtif
-RUMPCOMP_USER_CPPFLAGS+= -DVIRTIF_BASE=netmap
+RUMPCOMP_USER_CPPFLAGS+= -DVIRTIF_BASE=netmap -Wno-unused-but-set-variable
 
 .include "${RUMPTOP}/Makefile.rump"
 .include <bsd.lib.mk>
