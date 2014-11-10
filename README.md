@@ -6,5 +6,5 @@ to provide a userspace TCP/IP stack for use with the
 [netmap](http://info.iet.unipi.it/~luigi/netmap/) packet processing framework.
 Currently, netmap API revisions 11-15 are supported.
 
-See [the wiki](http://wiki.rumpkernel.org/Repo:-netmap-rumptcpip) for
+See [the wiki](http://wiki.rumpkernel.org/Repo:-drv-netif-netmap) for
 more information and instructions.
