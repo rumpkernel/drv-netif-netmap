@@ -24,12 +24,14 @@
  * SUCH DAMAGE.
  */
 
+#ifndef _KERNEL
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <ifaddrs.h>
@@ -48,17 +50,24 @@
 #include <rump/rumpuser_component.h>
 
 #include "if_virt.h"
-#include "rumpcomp_user.h"
+#include "virtif_user.h"
+
+#if VIFHYPER_REVISION != 20140313
+#error VIFHYPER_REVISION mismatch
+#endif
 
 struct virtif_user {
-	int viu_fd;
-	int viu_dying;
-	pthread_t viu_pt;
-
 	struct virtif_sc *viu_virtifsc;
 
-	void *nm_nifp; /* points to nifp if we use netmap */
-	char *nm_mem;	/* redundant */
+	int viu_fd;
+	int viu_pipe[2];
+	pthread_t viu_rcvthr;
+
+	int viu_dying;
+
+	struct netmap_if *nm_nifp;
+	char *nm_mem;
+	size_t nm_memsize;
 };
 
 #ifdef NETMAPIF_DEBUG
@@ -83,6 +92,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 		fprintf(stderr, "Unable to open /dev/netmap\n");
 		goto out;
 	}
+
 	bzero(&req, sizeof(req));
 	req.nr_version = NETMAP_API;
 	strncpy(req.nr_name, devstr, sizeof(req.nr_name));
@@ -95,6 +105,7 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 	}
 	/* fprintf(stderr, "need %d MB\n", req.nr_memsize >> 20); */
 
+	viu->nm_memsize = req.nr_memsize;
 	viu->nm_mem = mmap(0, req.nr_memsize,
 	    PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0);
 	if (viu->nm_mem == MAP_FAILED) {
@@ -120,6 +131,14 @@ opennetmap(const char *devstr, struct virtif_user *viu, uint8_t *enaddr)
 	return fd;
 }
 
+static void
+closenetmap(struct virtif_user *viu)
+{
+	if (viu->nm_mem && viu->nm_mem != MAP_FAILED)
+		munmap(viu->nm_mem, viu->nm_memsize);
+	if (viu->viu_fd >= 0) close(viu->viu_fd);
+}
+
 /*
  * Note: this thread is the only one pulling packets off of any
  * given netmap instance
@@ -128,31 +147,35 @@ static void *
 receiver(void *arg)
 {
 	struct virtif_user *viu = arg;
+	struct pollfd pfd[2];
 	struct iovec iov;
 	struct netmap_if *nifp = viu->nm_nifp;
 	struct netmap_ring *ring;
 	struct netmap_slot *slot;
-	struct pollfd pfd;
 	int prv;
 	int i;
 
 	rumpuser_component_kthread();
 
-	for (;;) {
-		pfd.fd = viu->viu_fd;
-		pfd.events = POLLIN;
+	pfd[0].fd = viu->viu_fd;
+	pfd[0].events = POLLIN;
+	pfd[1].fd = viu->viu_pipe[0];
+	pfd[1].events = POLLIN;
 
-		if (viu->viu_dying) {
-			break;
+	while (!viu->viu_dying) {
+		prv = poll(pfd, 2, -1);
+		if (prv == 0)
+			continue;
+		if (prv == -1) {
+			/* XXX */
+			fprintf(stderr, "%s: poll error: %d\n",
+			    nifp->ni_name, errno);
+			sleep(1);
+			continue;
 		}
+		if (pfd[1].revents & POLLIN)
+			continue;
 
-		prv = 0;
-		while (prv == 0) {
-			DPRINTF(("receive pkt via netmap\n"));
-			prv = poll(&pfd, 1, 1000);
-			if (prv > 0 || (prv < 0 && errno != EAGAIN))
-				break;
-		}
 #if 0
 		/* XXX: report non-transient errors */
 		if (ring->avail == 0) {
@@ -178,6 +201,8 @@ receiver(void *arg)
 		}
 	}
 
+	assert(viu->viu_dying);
+
 	rumpuser_component_kthread_release();
 	return NULL;
 }
@@ -192,32 +217,40 @@ VIFHYPER_CREATE(const char *devstr, struct virtif_sc *vif_sc, uint8_t *enaddr,
 
 	cookie = rumpuser_component_unschedule();
 
-	viu = malloc(sizeof(*viu));
+	viu = calloc(1, sizeof(*viu));
 	if (viu == NULL) {
 		rv = errno;
-		goto out;
+		goto oerr1;
 	}
+	viu->viu_virtifsc = vif_sc;
 
 	viu->viu_fd = opennetmap(devstr, viu, enaddr);
 	if (viu->viu_fd == -1) {
 		rv = errno;
-		free(viu);
-		goto out;
-	}
-	viu->viu_dying = 0;
-	viu->viu_virtifsc = vif_sc;
-
-	if ((rv = pthread_create(&viu->viu_pt, NULL, receiver, viu)) != 0) {
-		printf("%s: pthread_create failed!\n",
-		    VIF_STRING(VIFHYPER_CREATE));
-		close(viu->viu_fd);
-		free(viu);
+		goto oerr2;
 	}
 
- out:
+	if (pipe(viu->viu_pipe) == -1) {
+		rv = errno;
+		goto oerr3;
+	}
+
+	if ((rv = pthread_create(&viu->viu_rcvthr, NULL, receiver, viu)) != 0)
+		goto oerr4;
+
 	rumpuser_component_schedule(cookie);
-
 	*viup = viu;
+	return 0;
+
+oerr4:
+	close(viu->viu_pipe[0]);
+	close(viu->viu_pipe[1]);
+oerr3:
+	closenetmap(viu);
+oerr2:
+	free(viu);
+oerr1:
+	rumpuser_component_schedule(cookie);
 	return rumpuser_component_errtrans(rv);
 }
 
@@ -270,12 +303,26 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 		rumpuser_component_schedule(cookie);
 }
 
-void
+int
 VIFHYPER_DYING(struct virtif_user *viu)
 {
 
-	/* no locking necessary.  it'll be seen eventually */
+	void *cookie = rumpuser_component_unschedule();
+
 	viu->viu_dying = 1;
+	if (write(viu->viu_pipe[1],
+			&viu->viu_dying, sizeof(viu->viu_dying)) == -1) {
+		/*
+		 * this is here mostly to avoid a compiler warning
+		 * about ignoring the return value of write()
+		 */
+		fprintf(stderr, "%s: failed to signal thread\n",
+			viu->nm_nifp->ni_name);
+	}
+
+	rumpuser_component_schedule(cookie);
+
+	return 0;
 }
 
 void
@@ -283,8 +330,10 @@ VIFHYPER_DESTROY(struct virtif_user *viu)
 {
 	void *cookie = rumpuser_component_unschedule();
 
-	pthread_join(viu->viu_pt, NULL);
-	close(viu->viu_fd);
+	pthread_join(viu->viu_rcvthr, NULL);
+	closenetmap(viu);
+	close(viu->viu_pipe[0]);
+	close(viu->viu_pipe[1]);
 	free(viu);
 
 	rumpuser_component_schedule(cookie);
@@ -358,3 +407,5 @@ source_hwaddr(const char *ifname, uint8_t *enaddr)
 	return ifap ? 0 : 1;
 }
 #undef D
+
+#endif /* !_KERNEL */

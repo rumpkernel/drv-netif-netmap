@@ -1,20 +1,17 @@
 LIB=	rumpnet_netmapif
-
-SRCS=	if_virt.c
-SRCS+=	component.c
+VIRTIF=	netmap
 
 RUMPTOP=${TOPRUMP}
 
-.PATH:	${.CURDIR}/../libvirtif
+.include "${RUMPTOP}/net/lib/libvirtif/Makefile.virtif"
 
 CPPFLAGS+=	-I${RUMPTOP}/librump/rumpkern -I${RUMPTOP}/librump/rumpnet
-CPPFLAGS+=	-I${.CURDIR}/../libvirtif
-CPPFLAGS+=	-DVIRTIF_BASE=netmap -DRUMP_VIF_LINKSTR
+CPPFLAGS+=	-DRUMP_VIF_LINKSTR
 
-RUMPCOMP_USER=	#defined
+#RUMPCOMP_USER=	#defined
+RUMPCOMP_USER_SRCS=	netmapif_user.c
 RUMPCOMP_USER_CPPFLAGS+= ${NETMAPINCS:D-I${NETMAPINCS}}
-RUMPCOMP_USER_CPPFLAGS+= -I${.CURDIR}/../libvirtif
-RUMPCOMP_USER_CPPFLAGS+= -DVIRTIF_BASE=netmap
+RUMPCOMP_USER_CPPFLAGS+= -Wno-unused-but-set-variable
 
 .include "${RUMPTOP}/Makefile.rump"
 .include <bsd.lib.mk>
