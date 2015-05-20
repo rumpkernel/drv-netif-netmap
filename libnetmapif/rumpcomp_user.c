@@ -133,8 +133,8 @@ receiver(void *arg)
 	struct netmap_ring *ring;
 	struct netmap_slot *slot;
 	struct pollfd pfd;
+	unsigned int i;
 	int prv;
-	int i;
 
 	rumpuser_component_kthread();
 
@@ -246,7 +246,8 @@ VIFHYPER_SEND(struct virtif_user *viu, struct iovec *iov, size_t iovlen)
 		(void)poll(&pfd, 1, 500 /* ms */);
 	}
 	if (n > 0) {
-		int i, totlen = 0;
+		unsigned int i;
+		int totlen = 0;
 		struct netmap_slot *slot = &ring->slot[ring->cur];
 #define MAX_BUF_SIZE 1900
 		p = NETMAP_BUF(ring, slot->buf_idx);
